@@ -1,6 +1,17 @@
 # TFCV- Tensorflow Computer Vision
 
 TFCV is my repo for experimenting with Computer Vision models in Tensorflow 2. The goal is to have everything simple and searchable.
+<br><br>
+
+* **TO-DO**: 
+    * [ ] pick apart and implement [RetinaNet repo](https://github.com/fizyr/keras-retinanet) for understanding 
+    * [ ] create notebooks for each piece w/ visualizations and understanding
+    * [ ] run model w/ hyperparameters from RetinaFace modified for tf==2.2 and if good enough convert to tflite
+    * [ ] take trained model and fine tune with ArcFace loss for face embeddding
+    * [ ] convert that to tflite and get working on RaspberryPi
+    
+<br>
+
 
 
 | Section | Description |

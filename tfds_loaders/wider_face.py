@@ -221,10 +221,10 @@ class WiderFace(tfds.core.GeneratorBasedBuilder):
                     ymin, xmin, ymax, xmax = self._get_bounding_box_values(face['bbox'], img_width, img_height)
 
                     faces.append({
-                        'bbox': tfds.features.BBox(ymin=ymin,
-                                                   xmin=xmin,
-                                                   ymax=ymax,
-                                                   xmax=xmax),
+                        'bbox': tfds.features.BBox(xmin=xmin,
+                                                   ymin=ymin,
+                                                   xmax=xmax,
+                                                   ymax=ymax),
                         'blur': face['blur'],
                         'expression': face['expression'],
                         'illumination': face['illumination'],
@@ -242,3 +242,4 @@ class WiderFace(tfds.core.GeneratorBasedBuilder):
                 yield ann['image/filename'], record
             else:
                 print(f'Image file missing: {img_path}')
+                continue

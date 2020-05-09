@@ -1,6 +1,8 @@
 import tensorflow as tf
 from tensorflow.keras.layers import Conv2D
 
+from initializers import PriorProbability
+
 class ClassificationSubnet(tf.keras.layers.Layer):
     """Classification Subnet on top of FPN"""
     

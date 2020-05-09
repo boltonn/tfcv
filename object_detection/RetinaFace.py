@@ -64,4 +64,8 @@ class RetinaFace(tf.keras.Model):
 #         for feature_layer in features:
 #             landmarks_outputs.append(RegressionSubnet(n_landmarks=5, A=3)(feature_layer))
         #return features    
-        return classification_outputs, regression_outputs
+#         return classification_outputs, regression_outputs
+
+        def train_step(self, data):
+            
+    

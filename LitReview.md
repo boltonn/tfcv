@@ -14,7 +14,7 @@
     * EfficientNet: [[paper]](https://arxiv.org/pdf/1905.11946v3.pdf)
         * scaling models or determing the right combination of width, depth, and image resolution/size is hard and largely manual. Google investigated the tradeoffs more systematically by doing a grid search of these parameters and found a combination that is a lot faster and little bit more accuracte (they also include minimizing flops for speed in the loss)
         * they release several versions of this model with different number of paramets (0-7 w/ 7 meaning more), which gets of course a trade-off of more accuracy but slower inference
-    * Additional: AlexNet, Google LeNet, DenseNet
+    * Additional: AlexNet, InceptionV1, DenseNet, [ResNeXt](https://arxiv.org/pdf/1611.05431.pdf), [iResNet](https://arxiv.org/pdf/2004.04989.pdf), [MobileNetV2](https://arxiv.org/pdf/1801.04381.pdf), [DeConvolution](https://arxiv.org/pdf/1905.11926.pdf), [DCN layer](https://arxiv.org/pdf/1703.06211.pdf) [[code]](https://github.com/DHZS/tf-deformable-conv-layer/blob/master/nets/deformable_conv_layer.py)
 
 2. **Object Detection**
     * R-CNN: [[paper]](https://arxiv.org/pdf/1311.2524.pdf)
@@ -54,7 +54,7 @@
         * mostly the same as RetinaNet but reduce the stride and sizes to capture smaller faces, only need one aspect ratio (1) since heads are mostly square
         * add in a second regression subnet similar to bounding box regression but for five facial landmarks
         * use a G-CNN (graph-based convolutional neural network)... *more soon*
-    * Additional: [[MCNN]](https://arxiv.org/ftp/arxiv/papers/1604/1604.02878.pdf), [[AINNOFace]](https://arxiv.org/pdf/1905.01585v3.pdf)
+    * Additional: [[MCNN]](https://arxiv.org/ftp/arxiv/papers/1604/1604.02878.pdf), [[AINNOFace]](https://arxiv.org/pdf/1905.01585v3.pdf), [SSH](https://arxiv.org/pdf/1708.03979.pdf)
 
 4. **Face Verification:**
     *recognition is 1:1 and verification is 1:k. What we're actually interested in is the face encoding so more of a 1:k problem*
