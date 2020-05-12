@@ -238,6 +238,7 @@ class FilterDetections(tf.keras.layers.Layer):
         other          = inputs[2:]
 
         # wrap nms with our parameters
+        @tf.function
         def _filter_detections(args):
             boxes          = args[0]
             classification = args[1]
@@ -258,7 +259,7 @@ class FilterDetections(tf.keras.layers.Layer):
         outputs = tf.map_fn(
             _filter_detections,
             elems=[boxes, classification, other],
-            dtype=[tf.keras.backend.floatx(), tf.keras.backend.floatx(), 'int32'] + [o.dtype for o in other],
+            dtype=[tf.keras.backend.floatx(), tf.keras.backend.floatx(), tf.int32] + [o.dtype for o in other],
             parallel_iterations=self.parallel_iterations
         )
 

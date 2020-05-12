@@ -213,7 +213,7 @@ class WiderFace(tfds.core.GeneratorBasedBuilder):
             # this includes a category subdirectory (ex: 0--Parade\0_Parade_marchingband_1_5.jpg)
             img_path = os.path.join(image_dir, ann['image/filename'])
             if os.path.isfile(img_path):
-                img_width, img_height = self._get_image_shape(img_path)
+                img_height, img_width = self._get_image_shape(img_path)
 
                 faces=[]
                 for face in ann['faces']:
