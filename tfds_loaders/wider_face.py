@@ -159,7 +159,7 @@ class WiderFace(tfds.core.GeneratorBasedBuilder):
         ymin /= img_height
         ymax /= img_height
         
-        return ymin, xmin, ymax, xmax
+        return xmin, ymin, xmax, ymax 
   
     def _get_image_shape(self, image_path):
         image = tf.io.read_file(image_path)

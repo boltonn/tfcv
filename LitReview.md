@@ -14,7 +14,7 @@
     * EfficientNet: [[paper]](https://arxiv.org/pdf/1905.11946v3.pdf)
         * scaling models or determing the right combination of width, depth, and image resolution/size is hard and largely manual. Google investigated the tradeoffs more systematically by doing a grid search of these parameters and found a combination that is a lot faster and little bit more accuracte (they also include minimizing flops for speed in the loss)
         * they release several versions of this model with different number of paramets (0-7 w/ 7 meaning more), which gets of course a trade-off of more accuracy but slower inference
-    * Additional: AlexNet, InceptionV1, DenseNet, [ResNeXt](https://arxiv.org/pdf/1611.05431.pdf), [iResNet](https://arxiv.org/pdf/2004.04989.pdf), [MobileNetV2](https://arxiv.org/pdf/1801.04381.pdf), [DeConvolution](https://arxiv.org/pdf/1905.11926.pdf), [DCN layer](https://arxiv.org/pdf/1703.06211.pdf) [[code]](https://github.com/DHZS/tf-deformable-conv-layer/blob/master/nets/deformable_conv_layer.py)
+    * Additional: [AlexNet](https://papers.nips.cc/paper/4824-imagenet-classification-with-deep-convolutional-neural-networks.pdf), InceptionV1, DenseNet, [ResNeXt](https://arxiv.org/pdf/1611.05431.pdf), [iResNet](https://arxiv.org/pdf/2004.04989.pdf), [MobileNetV2](https://arxiv.org/pdf/1801.04381.pdf), [DeConvolution](https://arxiv.org/pdf/1905.11926.pdf), [DCN layer](https://arxiv.org/pdf/1703.06211.pdf) [[code]](https://github.com/DHZS/tf-deformable-conv-layer/blob/master/nets/deformable_conv_layer.py)
 
 2. **Object Detection**
     * R-CNN: [[paper]](https://arxiv.org/pdf/1311.2524.pdf)
