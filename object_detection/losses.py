@@ -92,7 +92,7 @@ def smooth_l1_loss(sigma=3.0):
         regression_target = y_true[:, :, :-1]
         anchor_state      = y_true[:, :, -1]
 
-        # filter out "ignore" anchors
+        # filter out "ignore" and negative anchors
         indices           = tf.where(tf.math.equal(anchor_state, 1))
         regression        = tf.gather_nd(regression, indices)
         regression_target = tf.gather_nd(regression_target, indices)

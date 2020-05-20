@@ -148,109 +148,12 @@ class Anchors(tf.keras.layers.Layer):
         })
 
         return config
-    
-    
-    
-    
-    
-    
-def anchor_targets_bbox(
-    anchors,
-    image_group,
-    annotations_group,
-    num_classes,
-    negative_overlap=0.4,
-    positive_overlap=0.5
-):
-    """ Generate anchor targets for bbox detection.
-    Args
-        anchors: np.array of annotations of shape (N, 4) for (x1, y1, x2, y2).
-        image_group: List of BGR images.
-        annotations_group: List of annotation dictionaries with each annotation containing 'labels' and 'bboxes' of an image.
-        num_classes: Number of classes to predict.
-        mask_shape: If the image is padded with zeros, mask_shape can be used to mark the relevant part of the image.
-        negative_overlap: IoU overlap for negative anchors (all anchors with overlap < negative_overlap are negative).
-        positive_overlap: IoU overlap or positive anchors (all anchors with overlap > positive_overlap are positive).
-    Returns
-        labels_batch: batch that contains labels & anchor states (np.array of shape (batch_size, N, num_classes + 1),
-                      where N is the number of anchors for an image and the last column defines the anchor state (-1 for ignore, 0 for bg, 1 for fg).
-        regression_batch: batch that contains bounding-box regression targets for an image & anchor states (np.array of shape (batch_size, N, 4 + 1),
-                      where N is the number of anchors for an image, the first 4 columns define regression targets for (x1, y1, x2, y2) and the
-                      last column defines anchor states (-1 for ignore, 0 for bg, 1 for fg).
-    """
-
-    assert(len(image_group) == len(annotations_group)), "The length of the images and annotations need to be equal."
-    assert(len(annotations_group) > 0), "No data received to compute anchor targets for."
-    for annotations in annotations_group:
-        assert('bboxes' in annotations), "Annotations should contain bboxes."
-        assert('labels' in annotations), "Annotations should contain labels."
-
-    batch_size = len(image_group)
-
-    regression_batch  = np.zeros((batch_size, anchors.shape[0], 4 + 1), dtype=keras.backend.floatx())
-    labels_batch      = np.zeros((batch_size, anchors.shape[0], num_classes + 1), dtype=keras.backend.floatx())
-
-    # compute labels and regression targets
-    for index, (image, annotations) in enumerate(zip(image_group, annotations_group)):
-        if annotations['bboxes'].shape[0]:
-            # obtain indices of gt annotations with the greatest overlap
-            positive_indices, ignore_indices, argmax_overlaps_inds = compute_gt_annotations(anchors, annotations['bboxes'], negative_overlap, positive_overlap)
-
-            labels_batch[index, ignore_indices, -1]       = -1
-            labels_batch[index, positive_indices, -1]     = 1
-
-            regression_batch[index, ignore_indices, -1]   = -1
-            regression_batch[index, positive_indices, -1] = 1
-
-            # compute target class labels
-            labels_batch[index, positive_indices, annotations['labels'][argmax_overlaps_inds[positive_indices]].astype(int)] = 1
-
-            regression_batch[index, :, :-1] = bbox_transform(anchors, annotations['bboxes'][argmax_overlaps_inds, :])
-
-        # ignore annotations outside of image
-        if image.shape:
-            anchors_centers = np.vstack([(anchors[:, 0] + anchors[:, 2]) / 2, (anchors[:, 1] + anchors[:, 3]) / 2]).T
-            indices = np.logical_or(anchors_centers[:, 0] >= image.shape[1], anchors_centers[:, 1] >= image.shape[0])
-
-            labels_batch[index, indices, -1]     = -1
-            regression_batch[index, indices, -1] = -1
-
-    return regression_batch, labels_batch
-
-
-def compute_gt_annotations(
-    anchors,
-    annotations,
-    negative_overlap=0.4,
-    positive_overlap=0.5
-):
-    """ Obtain indices of gt annotations with the greatest overlap.
-    Args
-        anchors: np.array of annotations of shape (N, 4) for (x1, y1, x2, y2).
-        annotations: np.array of shape (N, 5) for (x1, y1, x2, y2, label).
-        negative_overlap: IoU overlap for negative anchors (all anchors with overlap < negative_overlap are negative).
-        positive_overlap: IoU overlap or positive anchors (all anchors with overlap > positive_overlap are positive).
-    Returns
-        positive_indices: indices of positive anchors
-        ignore_indices: indices of ignored anchors
-        argmax_overlaps_inds: ordered overlaps indices
-    """
-
-    overlaps = compute_overlap(anchors.astype(np.float64), annotations.astype(np.float64))
-    argmax_overlaps_inds = np.argmax(overlaps, axis=1)
-    max_overlaps = overlaps[np.arange(overlaps.shape[0]), argmax_overlaps_inds]
-
-    # assign "dont care" labels
-    positive_indices = max_overlaps >= positive_overlap
-    ignore_indices = (max_overlaps > negative_overlap) & ~positive_indices
-
-    return positive_indices, ignore_indices, argmax_overlaps_inds
 
 
 def tf_compute_iou_map_fn(bbox, anchors):
     """Compute IoU for each annotation/bbox and anchor box combination
         Most other repos will process data as either numpy arrays, sometimes converted to cython code for extra speed.
-        However, Tensorflow Datasets is built to load data as TF Records so it generally makes sense to keep everything as Tensors. ie.
+        However, Tensorflow Datasets is built to load data as TF Records so it generally makes sense to keep everything as Tensors.
             * TF Object detection API: (https://github.com/tensorflow/models/blob/master/research/object_detection/utils/np_box_list_ops.py#L90)
             * Keras RetinaNet Tf 2.0: (https://github.com/fizyr/keras-retinanet/blob/master/keras_retinanet/utils/compute_overlap.pyx); cython code
           
@@ -280,33 +183,182 @@ def tf_compute_iou_map_fn(bbox, anchors):
     return iou
 
 
-def tf_compute_gt_annotations(
+def tf_compute_gt_indices(
     anchors,
-    annotations,
+    bboxes,
     negative_iou_thresh=0.3,
     positive_iou_thresh=0.5
 ):
     """ Obtain indices of gt annotations with the greatest overlap.
-    Args
-        anchors: np.array of annotations of shape (N, 4) for (x1, y1, x2, y2).
-        annotations: np.array of shape (N, 5) for (x1, y1, x2, y2, label).
-        negative_iou_thresh: IoU overlap for negative anchors (all anchors with overlap < negative_iou_thresh are negative).
+    
+    Args:
+        anchors (tensor): np.array of annotations of shape (N, 4) for (x1, y1, x2, y2).
+        bboxes (tensor): np.array of shape (N, 5) for (x1, y1, x2, y2, label).
+        negative_iou_thresh (float): IoU overlap for negative anchors (all anchors with overlap < negative_iou_thresh are negative).
             * RetinaNet uses 0.4 but RetinaFace used 0.3
-        positive_iou_thresh: IoU overlap or positive anchors (all anchors with overlap > positive_iou_thresh are positive).
-    Returns
-        positive_indices: indices of positive anchors
-        ignore_indices: indices of ignored anchors
-        max_iou_indices: ordered indices of anchors with max IoU
+        positive_iou_thresh (float): IoU overlap or positive anchors (all anchors with overlap > positive_iou_thresh are positive).
+        
+    Returns:
+        positive_indices (tensor): Tensor of anchor indices that contain an object (>= positive_iou_thresh) [N x 1]
+        ignore_indices (tensor): indices of ignored anchor [N x 1]
+        negative_indices (tensor): Tensor of anchor indices that are background (< negative_iou_thresh) [N x 1]
+        max_iou_indices (tensor): ordered indices of anchors with max IoU [N x 1]
     """
     
-    overlaps =  tf.map_fn(fn=lambda x: tf_compute_iou_map_fn(x, all_anchors), elems=unnormalized_bboxes)
-    # indices of the anchor boxes with max IoU for each bbox annotation
-    max_iou_indices = tf.math.argmax(overlaps, axis=1)
-    # the IoU at those indices
-    max_ious = tf.math.reduce_max(overlaps, axis=1) 
+    ious =  tf.map_fn(fn=lambda x: tf_compute_iou_map_fn(x, anchors), elems=bboxes)
+    ious = tf.transpose(ious)
+    # indices of the bbox annotation that each anchor box overlaps most with
+    max_iou_indices = tf.math.argmax(ious, axis=1)
+    # the IoU's for those indices
+    max_ious = tf.math.reduce_max(ious, axis=1) 
     
-    # assign "dont care" labels
-    positive_indices = tf.math.greater_equal(max_ious, positive_iou_thresh)
-    ignore_indices = tf.math.logical_and(tf.math.greater(max_ious, negative_iou_thresh), tf.math.less(max_ious, positive_iou_thresh))
+    positive_indices = tf.where(tf.math.greater_equal(max_ious, positive_iou_thresh))
+    
+    ignore_indices = tf.where(tf.math.logical_and(tf.math.greater_equal(max_ious, negative_iou_thresh), tf.math.less(max_ious, positive_iou_thresh)))
+    
+    negative_indices = tf.where(tf.math.less(max_ious, negative_iou_thresh))
 
-    return positive_indices, ignore_indices, max_iou_indices
+    return positive_indices, ignore_indices, negative_indices, max_iou_indices
+
+
+def compute_gt_transforms(anchors, gt_bboxes, mean=0.0, std=0.2):
+    """Compute ground-truth transformations from anchor boxes and corresponding g.t. bounding boxes
+    
+    Args:
+        anchors (tensor): anchor boxes unnormalized (N x 4)
+        gt_bboxes (tensor): bounding boxes with the highest IoU for each anchor g. t. bboxes (N x 4)
+    
+    Returns:
+        targets (tensor): target transforms [batch_size x ]
+    
+    """
+    anchor_widths  = anchors[:, 2] - anchors[:, 0]
+    anchor_heights = anchors[:, 3] - anchors[:, 1]
+
+    # According to the information provided by a keras-retinanet author, they got marginally better results using
+    # the following way of bounding box parametrization.
+    # See https://github.com/fizyr/keras-retinanet/issues/1273#issuecomment-585828825 for more details
+    targets_dx1 = (gt_bboxes[:, 0] - anchors[:, 0]) / anchor_widths
+    targets_dy1 = (gt_bboxes[:, 1] - anchors[:, 1]) / anchor_heights
+    targets_dx2 = (gt_bboxes[:, 2] - anchors[:, 2]) / anchor_widths
+    targets_dy2 = (gt_bboxes[:, 3] - anchors[:, 3]) / anchor_heights
+    
+    targets = tf.stack((targets_dx1, targets_dy1, targets_dx2, targets_dy2), axis=1)
+
+    targets = (targets - mean) / std
+    return targets
+
+
+
+def compute_targets(anchors, bboxes, num_classes, labels=None, negative_iou_thresh=0.3, positive_iou_thresh=0.5):
+    """Compute Classification and Regression Targets for Anchor Box dependent loss
+    
+    Args:
+        anchors (tensor): anchor boxes of shape [N x 4]
+        bboxes (tensor): unnormalized bounding boxes if format (x1, x2, y1, y2) of shape [K x 4]
+        num_classes (int): Number of classes
+        labels (tensor): Tensor of tf.int for each bbox if more than one class; else assume binary [K x 1]
+        negative_iou_thresh (float): All anchors < negative_iou_thresh are consider background or 'negative' examples (anchor state 0)
+        positive_iou_thresh (float): All anchors >= positive_iou_thresh are used as 'positive' examples for the loss (anchor state 1)
+            * anything in between is set to 'ignore' (anchor state -1)
+    
+    Returns:
+        classification_targets (tensor): Tensor of one-hot encoded labels for all bboxes with highest IoU per anchor, plus anchor state column (N, num_classes + 1)
+            * anchor state column -> (1) for positive anchor boxes, (0) for negative, (-1) for those to be ignored
+        regression_targets (tensor): Tensor of ground truth transformations applied to positive anchor boxes to get ground truth bounding boxes (N, 4 + 1)
+            * 4 + 1 = 4 transformations on each coordinate + same anchor state column as classification targets
+    """
+    positive_indices, ignore_indices, negative_indices, max_iou_indices = tf_compute_gt_indices(anchors, bboxes, negative_iou_thresh=0.4, positive_iou_thresh=0.5)
+    
+    #create the sine column for whether a anchor is background (0), an object (1), or should be ignore (-1)
+    iou_sine_col = tf.zeros(anchors.shape[0])
+    if positive_indices.shape!=0:
+        # we call this something else b/c we can use it to get the positive classes matrix
+        pos_iou_sine_col = tf.tensor_scatter_nd_add(iou_sine_col, positive_indices, tf.ones(positive_indices.shape[0]))
+    if ignore_indices.shape!=0:
+        iou_sine_col = tf.tensor_scatter_nd_sub(pos_iou_sine_col, ignore_indices, tf.ones(ignore_indices.shape[0]))
+        
+    #create the class targets (N, K+1)
+    def _map_class(max_iou_indices, labels):
+        """Fast way to map indexes of boxes to corresponsing labels"""
+        #add on index column
+        max_iou_indices = tf.stack([tf.reshape(tf.convert_to_tensor([np.arange(0, all_anchors.shape[0])]), [1, max_iou_indices.shape[0]]),
+                                    tf.cast(tf.expand_dims(max_iou_indices, axis=0), dtype=tf.int32)], axis=0)
+        max_iou_indices = tf.transpose(tf.squeeze(max_iou_indices))
+        broadcasted_labels = tf.broadcast_to(labels, [all_anchors.shape[0], random_labels.shape[0]])
+        anchor_classes = tf.gather_nd(broadcasted_labels, temp)
+        return anchor_classes
+
+    if num_classes<=2:
+        classification_targets = tf.transpose(tf.stack([pos_iou_sine_col, iou_sine_col], axis=0))
+    else:
+        assert labels is not None, "Labels as tensor of ints for each bbox need to be passed if multiple classes"
+        # map the bbox index that each anchor overlaps with the most to the corresponsing label
+        # this is very slow so need to come back to find a better way
+        anchor_classes = _map_class(max_iou_indices, labels)
+        
+        # keep only the positive ones (swap with -1 since tensorflow make -1 become 0 and one-hot enconding)
+        anchor_classes = tf.tensor_scatter_nd_update(anchor_classes, ignore_indices, tf.constant(-1, shape=ignore_indices.shape[0], dtype=tf.int32))
+        anchor_classes = tf.tensor_scatter_nd_update(anchor_classes, negative_indices, tf.constant(-1, shape=negative_indices.shape[0], dtype=tf.int32))
+
+        class_matrix = tf.one_hot(tf.cast(anchor_classes, tf.int32), num_classes)
+        
+        #add on the sine col
+        classification_targets = tf.concat([class_matrix, tf.expand_dims(iou_sine_col, -1)], axis=1)
+    
+    #create regression targets (N, 4 + 1)
+    #closest bounding box to each anchor
+    gt_bboxes = tf.gather(bboxes, max_iou_indices) # (N, 4)
+    
+    regression_matrix = compute_gt_transforms(anchors, gt_bboxes, mean=0.0, std=0.2)
+    #add on the sine col
+    regression_targets = tf.concat([regression_matrix, tf.expand_dims(iou_sine_col, -1)], axis=1)
+    return (classification_targets, regression_targets)
+
+
+def filter_anchors(anchors, classification_targets, regression_targets, img_width=640, img_height=640):
+    """Filter anchor boxes (set anchor state to 'ignore' (-1) for classification and regression targets ) whose center isn't the image
+    
+    Args:
+        anchors (tensor): unnormalized anchor boxes (x1, y1, x2, y2) of shape [N x 4]
+        classification_targets (tensor): Tensor of one-hot encoded labels for all bboxes with highest IoU per anchor, plus anchor state column (N, num_classes + 1)
+            * anchor state column -> (1) for positive anchor boxes, (0) for negative, (-1) for those to be ignored
+        regression_targets (tensor): Tensor of ground truth transformations applied to positive anchor boxes to get ground truth bounding boxes (N, 4 + 1)
+            * 4 + 1 = 4 transformations on each coordinate + same anchor state column as classification targets
+        img_width (int): image width
+        img_height (int): image height
+        
+    Returns:
+        classification_targets (tensor): same tensor but with anchor state 'ignore' / (-1) for any anchor box whose center isnt in the image (N, num_classes + 1)
+        regression_targets (tensor): same tensor but with anchor state 'ignore' / (-1) for any anchor box whose center isnt in the image (N, 4 + 1) 
+    """
+    anchor_centers = tf.transpose(tf.stack([(anchors[:, 0] + anchors[:, 2]) / 2, (anchors[:, 1] + anchors[:, 3]) / 2]))
+    
+    outside_wdith_indices = tf.math.logical_or(tf.math.greater_equal(anchor_centers[:, 0], img_width), tf.math.less_equal(anchor_centers[:, 0], 0.))
+    outside_height_indices = tf.math.logical_or(tf.math.greater_equal(anchor_centers[:, 0], img_height), tf.math.less_equal(anchor_centers[:, 0], 0.))
+    ignore_indices = tf.math.logical_or(outside_wdith_indices, outside_height_indices)
+    
+    #update
+    if ignore_indices.shape[0]!=0:
+        classification_targets = tf.tensor_scatter_nd_update(classification_targets, ignore_indices, tf.constant(-1, shape=ignore_indices.shape[0], dtype=tf.float32))
+        regression_targets = tf.tensor_scatter_nd_update(regression_targets, ignore_indices, tf.constant(-1, shape=ignore_indices.shape[0], dtype=tf.float32))
+
+    return (classification_targets, regression_targets)
+    
+    
+# Inferene Utils
+    
+def compute_pred_boxes(deltas, anchors, mean=0.0, std=0.2):
+    """Get Predicted Boxes from predicted deltas and anchors"""
+    #first dimension is the batch size
+    width  = anchors[:, :, 2] - anchors[:, :, 0]
+    height = anchors[:, :, 3] - anchors[:, :, 1]
+
+    x1 = anchors[:, :, 0] + (deltas[:, :, 0] * std[0] + mean[0]) * width
+    y1 = anchors[:, :, 1] + (deltas[:, :, 1] * std[1] + mean[1]) * height
+    x2 = anchors[:, :, 2] + (deltas[:, :, 2] * std[2] + mean[2]) * width
+    y2 = anchors[:, :, 3] + (deltas[:, :, 3] * std[3] + mean[3]) * height
+
+    pred_boxes = tf.stack([x1, y1, x2, y2], axis=2)
+
+    return pred_boxes

@@ -4,6 +4,7 @@ import tensorflow as tf
 #TO-DO: transformations (translation, rotation, shear, etc.)
 
 def unnormalize_boxes(boxes, img_width, img_height):
+    """Unnormalize anchor or bounding boxes by image height and width"""
     x1 = boxes[:, 0]*img_width
     y1 = boxes[:, 1]*img_height
     x2 = boxes[:, 2]*img_width

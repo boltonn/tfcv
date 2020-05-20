@@ -9,11 +9,15 @@ import matplotlib.patches as patches
 from augmentations import transform_bbox
 
 
-def plot_boxes(img=None, boxes=None, normalized=True, labels=None, linewidth=1.5, box_color='g', font_color='w', facecolor=None, fontsize=16):
+def plot_boxes(title=None, img=None, boxes=None, normalized=True, labels=None, linewidth=1.5, box_color='g', font_color='w', facecolor=None, fontsize=16):
     """Plot boxes on an image"""
     
     #fig, ax = plt.subplots(1, figsize=(fig_size, fig_size))
     fig, ax = plt.subplots(1)
+    
+    if title:
+        ax.set_title(title, fontsize=20, color=font_color)
+    
     if facecolor:
         ax.set_facecolor='b'
     
