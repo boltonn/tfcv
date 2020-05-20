@@ -245,3 +245,68 @@ def compute_gt_annotations(
     ignore_indices = (max_overlaps > negative_overlap) & ~positive_indices
 
     return positive_indices, ignore_indices, argmax_overlaps_inds
+
+
+def tf_compute_iou_map_fn(bbox, anchors):
+    """Compute IoU for each annotation/bbox and anchor box combination
+        Most other repos will process data as either numpy arrays, sometimes converted to cython code for extra speed.
+        However, Tensorflow Datasets is built to load data as TF Records so it generally makes sense to keep everything as Tensors. ie.
+            * TF Object detection API: (https://github.com/tensorflow/models/blob/master/research/object_detection/utils/np_box_list_ops.py#L90)
+            * Keras RetinaNet Tf 2.0: (https://github.com/fizyr/keras-retinanet/blob/master/keras_retinanet/utils/compute_overlap.pyx); cython code
+          
+          I have created this function to get decent run times by avoiding for loops but keep everything in Tensorflow.
+          We can do this because the anchors stay the same for every image so we can parallelize all bbox calulations against those anchors but it still feels like a hack.
+
+    
+    Args:
+        bbox (Tensor): (N, 4) tensor of all annotated bounding boxes of form (xmin, ymin, xmax, ymax) unnormalized
+        anchors (Tensor): (K, 4) tensor of all anchor boxes (unnormalized)
+        
+    Returns:
+        iou (Tensor): (N, K) tensor of overlap values between 0 and 1
+    """    
+    
+    #taking advantage of TF's broadcasting
+    intersection_xmin = tf.math.maximum(anchors[:, 0], bbox[0])
+    intersection_xmax = tf.math.minimum(anchors[:, 2], bbox[2])
+    intersection_ymin = tf.math.maximum(anchors[:, 1], bbox[1])
+    intersection_ymax = tf.math.minimum(anchors[:, 3], bbox[3])
+    intersection = tf.math.maximum(0, (intersection_xmax - intersection_xmin)) * tf.math.maximum(0, (intersection_ymax - intersection_ymin))
+    anchor_areas = (anchors[:, 2] - anchors[:, 0]) * (anchors[:, 3] - anchors[:, 1])
+    
+    bbox_area = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
+    union = anchor_areas + bbox_area - intersection
+    iou = intersection/union
+    return iou
+
+
+def tf_compute_gt_annotations(
+    anchors,
+    annotations,
+    negative_iou_thresh=0.3,
+    positive_iou_thresh=0.5
+):
+    """ Obtain indices of gt annotations with the greatest overlap.
+    Args
+        anchors: np.array of annotations of shape (N, 4) for (x1, y1, x2, y2).
+        annotations: np.array of shape (N, 5) for (x1, y1, x2, y2, label).
+        negative_iou_thresh: IoU overlap for negative anchors (all anchors with overlap < negative_iou_thresh are negative).
+            * RetinaNet uses 0.4 but RetinaFace used 0.3
+        positive_iou_thresh: IoU overlap or positive anchors (all anchors with overlap > positive_iou_thresh are positive).
+    Returns
+        positive_indices: indices of positive anchors
+        ignore_indices: indices of ignored anchors
+        max_iou_indices: ordered indices of anchors with max IoU
+    """
+    
+    overlaps =  tf.map_fn(fn=lambda x: tf_compute_iou_map_fn(x, all_anchors), elems=unnormalized_bboxes)
+    # indices of the anchor boxes with max IoU for each bbox annotation
+    max_iou_indices = tf.math.argmax(overlaps, axis=1)
+    # the IoU at those indices
+    max_ious = tf.math.reduce_max(overlaps, axis=1) 
+    
+    # assign "dont care" labels
+    positive_indices = tf.math.greater_equal(max_ious, positive_iou_thresh)
+    ignore_indices = tf.math.logical_and(tf.math.greater(max_ious, negative_iou_thresh), tf.math.less(max_ious, positive_iou_thresh))
+
+    return positive_indices, ignore_indices, max_iou_indices

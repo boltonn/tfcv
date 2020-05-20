@@ -17,7 +17,7 @@ limitations under the License.
 import tensorflow as tf
 
 
-def focal(alpha=0.25, gamma=2.0):
+def focal_loss(alpha=0.25, gamma=2.0):
     """ Create a functor for computing the focal loss.
 
     Args
@@ -66,7 +66,7 @@ def focal(alpha=0.25, gamma=2.0):
     return _focal
 
 
-def smooth_l1(sigma=3.0):
+def smooth_l1_loss(sigma=3.0):
     """ Create a smooth L1 loss functor.
 
     Args

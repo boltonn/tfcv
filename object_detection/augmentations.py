@@ -1,7 +1,45 @@
 import numpy as np
 import tensorflow as tf
 
-#TO-DO: color and transformations (translation, rotation, shear, etc.)
+#TO-DO: transformations (translation, rotation, shear, etc.)
+
+def unnormalize_boxes(boxes, img_width, img_height):
+    x1 = boxes[:, 0]*img_width
+    y1 = boxes[:, 1]*img_height
+    x2 = boxes[:, 2]*img_width
+    y2 = boxes[:, 3]*img_height
+    if tf.is_tensor(boxes):
+        boxes = tf.stack([x1, y1, x2, y2], axis=1)
+    else:
+        boxes = np.stack([x1, y1, x2, y2], axis=1)
+    return boxes
+        
+
+
+#not sure if there is a better place for this
+def transform_bbox(bbox, img_width=None, img_height=None, normalized=False):
+    """Transform bbox from (ymin, xmin, ymax, xmax) -> (xmin, ymin, w, h)
+        * xmin and ymin will be unormalized    
+    Args:
+        bbox (iter): Bounding box of form (x1, y1, x2, y2)
+        img_width (int): Image width
+        img_height (int): Image height
+        normalized (bool): If input is normalized by image resolution
+    Returns:
+        bbox (list): Bounding box of form (xmin, ymin, w, h)
+    """
+    #  (ymin, xmin, ymax, xmax) -> (xmin, ymin, w, h)
+    xmin, ymin, xmax, ymax = bbox
+
+    if normalized:
+        xmin *= img_width
+        ymin *= img_height
+        xmax *= img_width
+        ymax *= img_height
+        
+    w = abs(xmax - xmin) 
+    h = abs(ymax - ymin)
+    return [xmin, ymin, w, h]
 
 
 def resize(img, bboxes, height=640, width=640):
@@ -10,8 +48,8 @@ def resize(img, bboxes, height=640, width=640):
     img = tf.image.resize(img, (height, width), method='bilinear', preserve_aspect_ratio=True)
     #boxes dont need adjustments when normalized
     return img, bboxes
+ 
     
-
 def filter_boxes(bboxes, min_x=0, max_x=1, min_y=0, max_y=1):
     """Filter out bounding boxes"""
     #TO-DO: Nobody does this but it seems we should crop to an area where there is at least one object
@@ -26,17 +64,21 @@ def filter_boxes(bboxes, min_x=0, max_x=1, min_y=0, max_y=1):
         #make sure not empty since will break concat
         if not tf.equal(tf.size(condition), 0):
             invalid_indices.append(condition)
-        if invalid_indices:
-            invalid_indices = tf.concat(invalid_indices, axis=1)
-            invalid_indices = tf.keras.backend.flatten(invalid_indices)
-            invalid_indices = tf.sort(invalid_indices, axis=0, direction='ASCENDING')
-            invalid_indices, _ = tf.unique(invalid_indices)
             
-            n_boxes, _ = bboxes.shape
-            indices = tf.cast([idx for idx in range(0, n_boxes)], dtype=tf.int64)
-            
-            valid_indices = tf.gather(indices, tf.where(tf.math.not_equal(indices, invalid_indices)))
-            bboxes = tf.gather(bboxes, valid_indices)
+    if invalid_indices:
+        invalid_indices = tf.concat(invalid_indices, axis=0)
+        invalid_indices = tf.keras.backend.flatten(invalid_indices)
+        invalid_indices = tf.sort(invalid_indices, axis=0, direction='ASCENDING')
+        invalid_indices, _ = tf.unique(invalid_indices)
+        n_boxes, _ = bboxes.shape
+        indices = tf.cast([idx for idx in range(0, n_boxes)], dtype=tf.int32)
+        
+        #hack way for negative indexing (since tensorflow doesnt support complex indexing like numpy)
+        updates = tf.cast([-1 for _ in range(0, len(invalid_indices))], dtype=tf.int32)
+        invalid_indices = tf.expand_dims(invalid_indices, axis=-1)
+        #replace indices w/ -1
+        indices = tf.tensor_scatter_nd_update(tensor=indices, indices=invalid_indices, updates=updates)
+        bboxes = tf.gather(bboxes, tf.keras.backend.flatten(tf.where(indices>=0)))
     return bboxes
 
 
