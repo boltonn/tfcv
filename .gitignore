@@ -5,6 +5,7 @@ image_captioning/
 # Tensorflow 
 *runs/
 *submission/
+*logs/
 
 # Data
 *data/
