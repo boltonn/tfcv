@@ -60,10 +60,14 @@ def filter_boxes(bboxes, min_x=0, max_x=1, min_y=0, max_y=1):
                       tf.where(tf.math.less_equal(bboxes[:, 3],  bboxes[:, 1])),
                       tf.where(tf.math.less(bboxes[:, 0], min_x)),
                       tf.where(tf.math.less(bboxes[:, 2], min_y)),
+                      tf.where(tf.math.less(bboxes[:, 1], min_x)),
+                      tf.where(tf.math.less(bboxes[:, 3], min_y)),
                       tf.where(tf.math.greater(bboxes[:, 1],  max_x)),
-                      tf.where(tf.math.greater(bboxes[:, 3],  max_y))]:
+                      tf.where(tf.math.greater(bboxes[:, 3],  max_y)),
+                      tf.where(tf.math.greater(bboxes[:, 0],  max_x)),
+                      tf.where(tf.math.greater(bboxes[:, 2],  max_y))]:
         #make sure not empty since will break concat
-        if not tf.equal(tf.size(condition), 0):
+        if condition.get_shape()[0]!=0:
             invalid_indices.append(condition)
             
     if invalid_indices:
@@ -71,11 +75,14 @@ def filter_boxes(bboxes, min_x=0, max_x=1, min_y=0, max_y=1):
         invalid_indices = tf.keras.backend.flatten(invalid_indices)
         invalid_indices = tf.sort(invalid_indices, axis=0, direction='ASCENDING')
         invalid_indices, _ = tf.unique(invalid_indices)
-        n_boxes, _ = bboxes.shape
-        indices = tf.cast([idx for idx in range(0, n_boxes)], dtype=tf.int32)
+        boxes_shape = tf.shape(bboxes)
+        n_boxes = boxes_shape[0]
+        indices = tf.range(n_boxes, delta=1, dtype=tf.int32)
+#        indices = tf.cast([idx for idx in range(0, n_boxes)], dtype=tf.int32)
         
         #hack way for negative indexing (since tensorflow doesnt support complex indexing like numpy)
-        updates = tf.cast([-1 for _ in range(0, len(invalid_indices))], dtype=tf.int32)
+        updates = tf.math.negative(tf.ones(tf.shape(invalid_indices)[0], dtype=tf.int32)) #vector of -1s
+        #updates = tf.cast([-1 for _ in range(0, len(invalid_indices))], dtype=tf.int32)
         invalid_indices = tf.expand_dims(invalid_indices, axis=-1)
         #replace indices w/ -1
         indices = tf.tensor_scatter_nd_update(tensor=indices, indices=invalid_indices, updates=updates)
@@ -96,40 +103,81 @@ def clip_boxes(bboxes, clip_min=0, clip_max=1):
 
 
 
-def random_crop(img, bboxes, lower_bound=0.3, upper_bound=1., clip=True):
+def random_crop(img, bboxes, lower_bound=0.3, upper_bound=1., clip=True, min_boxes=0, bbox_normalized=True):
     # TO-DO: want to make sure it at least have one face ?
     """Random Crop of image proportional to smallest side"""
-    img_height, img_width, _ = img.shape
     
+    img_shape = tf.cast(tf.shape(img), dtype=tf.float32)
+    img_height = img_shape[0]
+    img_width = img_shape[1]
+    
+    #unnormalize bboxes
+    if bbox_normalized:
+        bboxes = unnormalize_boxes(bboxes, img_width=img_width, img_height=img_height)
+        
     #take random proportion from the smallest side
-    prop_crop_size = np.random.uniform(low=lower_bound, high=upper_bound, size=1)
+    prop_crop_size = tf.random.uniform([1], minval=lower_bound, maxval=upper_bound, dtype=tf.float32)
+    #prop_crop_size = np.random.uniform(low=lower_bound, high=upper_bound, size=1)
     # get smallest side
-    min_size = np.amin(img.shape[:-1]) # not including batch_size, -1 ignoring channels
-    crop_size = int(prop_crop_size*min_size)
-    #print(f'crop_size: {crop_size}')
+    min_size = tf.cast(tf.reduce_min([img_height, img_width]), dtype=tf.float32) # not including batch_size, -1 ignoring channels
+    crop_size = tf.cast(prop_crop_size*min_size, dtype=tf.int32)
     
-    #generate random pixels to crop on (within range of new crop)
-    random_x = np.random.randint(0, img_width - crop_size + 1)
-    random_y = np.random.randint(0, img_height - crop_size + 1)
-    #print(f'random_x: {random_x}')
-    #print(f'random_y: {random_y}')
+    if min_boxes>0:
+        max_val_x = tf.squeeze(tf.cast(img_width, dtype=tf.int32) - crop_size + 1)
+        max_val_y = tf.squeeze(tf.cast(img_height, dtype=tf.int32) - crop_size + 1)
+        
+        #sometime this is impossibel to crop_size needs to be increased
+        max_starting_point_x = tf.cast(tf.sort(bboxes[:, 0], direction='DESCENDING')[min_boxes-1], dtype=tf.int32)
+        max_starting_point_y = tf.cast(tf.sort(bboxes[:, 1], direction='DESCENDING')[min_boxes-1], dtype=tf.int32)
+        min_starting_point_x = tf.cast(tf.sort(bboxes[:, 2], direction='ASCENDING')[min_boxes-1], dtype=tf.int32)
+        min_starting_point_y = tf.cast(tf.sort(bboxes[:, 3], direction='ASCENDING')[min_boxes-1], dtype=tf.int32)
 
-    img = img[random_y:(random_y+crop_size), random_x:(random_x+crop_size), :]
+        min_val_x = tf.squeeze(min_starting_point_x - crop_size)
+        min_val_y = tf.squeeze(min_starting_point_y - crop_size)
+
+        min_val_x = tf.reduce_max([0, min_val_x])
+        min_val_y = tf.reduce_max([0, min_val_y])
+        max_val_x = tf.reduce_min([max_starting_point_x, max_val_x])
+        max_val_y = tf.reduce_min([max_starting_point_y, max_val_y])
+        
+        #that crop_size is impossible while keeping a face
+        if tf.less_equal(max_val_y, min_val_y):
+            new_img, new_boxes = random_crop(img, bboxes, lower_bound=lower_bound, upper_bound=upper_bound, clip=clip, bbox_normalized=False)
+        
+        random_x = tf.squeeze(tf.random.uniform([1], minval=min_val_x, maxval=max_val_x, dtype=tf.int32))
+        random_y = tf.squeeze(tf.random.uniform([1], minval=min_val_y, maxval=max_val_y, dtype=tf.int32))
+        
+    random_x = tf.squeeze(tf.random.uniform([1], minval=0, maxval=tf.squeeze(tf.cast(img_width, dtype=tf.int32) - crop_size + 1), dtype=tf.int32))
+    random_y = tf.squeeze(tf.random.uniform([1], minval=0, maxval=tf.squeeze(tf.cast(img_height, dtype=tf.int32) - crop_size + 1), dtype=tf.int32))
     
+    new_img = img[random_y:(random_y+tf.squeeze(crop_size)), random_x:(random_x+tf.squeeze(crop_size)), :]
+    
+    random_x = tf.cast(random_x, dtype=tf.float32)
+    random_y = tf.cast(random_y, dtype=tf.float32)
+    crop_size = tf.cast(crop_size, dtype=tf.float32)
+
     #un-normalize and get new normalized coordinates
-    x1 = (tf.math.round(bboxes[:, 0]*img_width) - random_x) / crop_size
-    y1 = (tf.math.round(bboxes[:, 1]*img_height) - random_y) / crop_size
-    x2 = (tf.math.round(bboxes[:, 2]*img_width) - random_x) / crop_size
-    y2 = (tf.math.round(bboxes[:, 3]*img_height) - random_y) / crop_size
-    bboxes = tf.keras.backend.stack([x1, y1, x2, y2], axis=1)
+    x1 = (bboxes[:, 0] - random_x) / crop_size
+    y1 = (bboxes[:, 1] - random_y) / crop_size
+    x2 = (bboxes[:, 2] - random_x) / crop_size
+    y2 = (bboxes[:, 3] - random_y) / crop_size
+    new_boxes = tf.keras.backend.stack([x1, y1, x2, y2], axis=1)
+    
+    new_boxes = filter_boxes(new_boxes)
     
     if clip:
-        bboxes = clip_boxes(bboxes)
+        new_boxes = clip_boxes(new_boxes)
+        
+    #print('Failed so trying again')
+    # catch-all because it is possible that no box is in between the max box and min box
+    if new_boxes.get_shape()[0]==0:
+        # bboxes already normalized
+        new_img, new_boxes = random_crop(img, bboxes, lower_bound=lower_bound, upper_bound=upper_bound, clip=clip, bbox_normalized=False)
     
-    return img, bboxes
+    return new_img, new_boxes
 
 
-def random_horizontal_flip(img, bboxes, prob=0.5):
+def tf_random_horizontal_flip(img, bboxes, prob=0.5):
     """Random horizontal flip on image and bounding boxes"""
     
     p = np.random.uniform(low=0, high=1, size=1)

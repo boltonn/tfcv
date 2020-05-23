@@ -69,7 +69,7 @@ class AnchorUtils():
         shifts = tf.keras.backend.stack([shift_x, shift_y, shift_x, shift_y], axis=0)
         shifts = tf.keras.backend.transpose(shifts)
         
-        k = tf.keras.backend.shape(shifts)[0]
+        k = tf.shape(shifts)[0]
         
         anchors = tf.convert_to_tensor(anchors, dtype=tf.float32)
         shifts = tf.cast(shifts, dtype=tf.float32)
@@ -168,13 +168,15 @@ def tf_compute_iou_map_fn(bbox, anchors):
     Returns:
         iou (Tensor): (N, K) tensor of overlap values between 0 and 1
     """    
+    anchors = tf.cast(anchors, dtype=tf.float32)
+    bbox = tf.cast(bbox, dtype=tf.float32)
     
     #taking advantage of TF's broadcasting
     intersection_xmin = tf.math.maximum(anchors[:, 0], bbox[0])
     intersection_xmax = tf.math.minimum(anchors[:, 2], bbox[2])
     intersection_ymin = tf.math.maximum(anchors[:, 1], bbox[1])
     intersection_ymax = tf.math.minimum(anchors[:, 3], bbox[3])
-    intersection = tf.math.maximum(0, (intersection_xmax - intersection_xmin)) * tf.math.maximum(0, (intersection_ymax - intersection_ymin))
+    intersection = tf.math.maximum(0., (intersection_xmax - intersection_xmin)) * tf.math.maximum(0., (intersection_ymax - intersection_ymin))
     anchor_areas = (anchors[:, 2] - anchors[:, 0]) * (anchors[:, 3] - anchors[:, 1])
     
     bbox_area = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
@@ -271,21 +273,22 @@ def compute_targets(anchors, bboxes, num_classes, labels=None, negative_iou_thre
     positive_indices, ignore_indices, negative_indices, max_iou_indices = tf_compute_gt_indices(anchors, bboxes, negative_iou_thresh=0.4, positive_iou_thresh=0.5)
     
     #create the sine column for whether a anchor is background (0), an object (1), or should be ignore (-1)
-    iou_sine_col = tf.zeros(anchors.shape[0])
-    if positive_indices.shape!=0:
+    iou_sine_col = tf.zeros(anchors.get_shape()[0])
+    pos_iou_sine_col = tf.zeros(anchors.get_shape()[0])
+    if positive_indices.get_shape()[0]!=0:
         # we call this something else b/c we can use it to get the positive classes matrix
-        pos_iou_sine_col = tf.tensor_scatter_nd_add(iou_sine_col, positive_indices, tf.ones(positive_indices.shape[0]))
-    if ignore_indices.shape!=0:
-        iou_sine_col = tf.tensor_scatter_nd_sub(pos_iou_sine_col, ignore_indices, tf.ones(ignore_indices.shape[0]))
+        pos_iou_sine_col = tf.tensor_scatter_nd_add(iou_sine_col, positive_indices, tf.ones(tf.shape(positive_indices)[0]))
+    if ignore_indices.get_shape()[0]!=0:
+        iou_sine_col = tf.tensor_scatter_nd_sub(pos_iou_sine_col, ignore_indices, tf.ones(tf.shape(ignore_indices)[0]))
         
     #create the class targets (N, K+1)
     def _map_class(max_iou_indices, labels):
         """Fast way to map indexes of boxes to corresponsing labels"""
         #add on index column
-        max_iou_indices = tf.stack([tf.reshape(tf.convert_to_tensor([np.arange(0, all_anchors.shape[0])]), [1, max_iou_indices.shape[0]]),
+        max_iou_indices = tf.stack([tf.reshape(tf.convert_to_tensor([np.arange(0, tf.shape(all_anchors)[0])]), [1, tf.shape(max_iou_indices)[0]]),
                                     tf.cast(tf.expand_dims(max_iou_indices, axis=0), dtype=tf.int32)], axis=0)
         max_iou_indices = tf.transpose(tf.squeeze(max_iou_indices))
-        broadcasted_labels = tf.broadcast_to(labels, [all_anchors.shape[0], random_labels.shape[0]])
+        broadcasted_labels = tf.broadcast_to(labels, [tf.shape(all_anchors)[0], tf.shape(random_labels)[0]])
         anchor_classes = tf.gather_nd(broadcasted_labels, temp)
         return anchor_classes
 
@@ -298,8 +301,8 @@ def compute_targets(anchors, bboxes, num_classes, labels=None, negative_iou_thre
         anchor_classes = _map_class(max_iou_indices, labels)
         
         # keep only the positive ones (swap with -1 since tensorflow make -1 become 0 and one-hot enconding)
-        anchor_classes = tf.tensor_scatter_nd_update(anchor_classes, ignore_indices, tf.constant(-1, shape=ignore_indices.shape[0], dtype=tf.int32))
-        anchor_classes = tf.tensor_scatter_nd_update(anchor_classes, negative_indices, tf.constant(-1, shape=negative_indices.shape[0], dtype=tf.int32))
+        anchor_classes = tf.tensor_scatter_nd_update(anchor_classes, ignore_indices, tf.constant(-1, shape=tf.shape(ignore_indices)[0], dtype=tf.int32))
+        anchor_classes = tf.tensor_scatter_nd_update(anchor_classes, negative_indices, tf.constant(-1, shape=tf.shape(negative_indices)[0], dtype=tf.int32))
 
         class_matrix = tf.one_hot(tf.cast(anchor_classes, tf.int32), num_classes)
         
@@ -313,7 +316,7 @@ def compute_targets(anchors, bboxes, num_classes, labels=None, negative_iou_thre
     regression_matrix = compute_gt_transforms(anchors, gt_bboxes, mean=0.0, std=0.2)
     #add on the sine col
     regression_targets = tf.concat([regression_matrix, tf.expand_dims(iou_sine_col, -1)], axis=1)
-    return (classification_targets, regression_targets)
+    return (tf.expand_dims(classification_targets, 0), tf.expand_dims(regression_targets, 0))
 
 
 def filter_anchors(anchors, classification_targets, regression_targets, img_width=640, img_height=640):
@@ -339,9 +342,9 @@ def filter_anchors(anchors, classification_targets, regression_targets, img_widt
     ignore_indices = tf.math.logical_or(outside_wdith_indices, outside_height_indices)
     
     #update
-    if ignore_indices.shape[0]!=0:
-        classification_targets = tf.tensor_scatter_nd_update(classification_targets, ignore_indices, tf.constant(-1, shape=ignore_indices.shape[0], dtype=tf.float32))
-        regression_targets = tf.tensor_scatter_nd_update(regression_targets, ignore_indices, tf.constant(-1, shape=ignore_indices.shape[0], dtype=tf.float32))
+    if tf.shape(ignore_indices)[0]!=0:
+        classification_targets = tf.tensor_scatter_nd_update(classification_targets, ignore_indices, tf.constant(-1, shape=tf.shape(ignore_indices)[0], dtype=tf.float32))
+        regression_targets = tf.tensor_scatter_nd_update(regression_targets, ignore_indices, tf.constant(-1, shape=tf.shape(ignore_indices)[0], dtype=tf.float32))
 
     return (classification_targets, regression_targets)
     

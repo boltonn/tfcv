@@ -12,6 +12,9 @@ class ClassificationSubnet(tf.keras.layers.Layer):
         self.A = A
         self.prior = prior
         
+    def compute_output_shape(self, input_shape):
+        return input_shape[0]
+        
     def call(self, inputs):
         outputs = inputs
         for i in range(4):
@@ -45,6 +48,9 @@ class RegressionSubnet(tf.keras.layers.Layer):
         super(RegressionSubnet, self).__init__()
         self.n_landmarks = n_landmarks
         self.A = A
+        
+    def compute_output_shape(self, input_shape):
+        return input_shape[0]
         
     def call(self, inputs):
         outputs = inputs

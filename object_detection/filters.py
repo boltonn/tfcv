@@ -238,7 +238,7 @@ class FilterDetections(tf.keras.layers.Layer):
         other          = inputs[2:]
 
         # wrap nms with our parameters
-        @tf.function
+        #@tf.function
         def _filter_detections(args):
             boxes          = args[0]
             classification = args[1]

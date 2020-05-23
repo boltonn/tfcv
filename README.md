@@ -10,12 +10,12 @@ TFCV is my repo for experimenting with Computer Vision models in Tensorflow 2. T
         * [x] create FPN
         * [x] create context layers for classification and regression for final output
         * [x] work on anchor boxes
-        * [x] image augmentations (**currently working on**) and incorporate w/ anchors for preprocessing
-        * [ ] figure out loss
+        * [x] image augmentations and incorporate w/ anchors for preprocessing (need to make sure crop has at least one box)
+        * [x] figure out loss
         * [ ] understand inference differences (non-max supression, etc.)
-        * [ ] modularize for tensorflow 2.2 (can now change **train_step** and **predict_step**)
-        * [ ] add callbacks
-    * [ ] create notebooks for each piece w/ visualizations and understanding
+        * [ ] modularize for tensorflow 2.2 (can now change **train_step** and **predict_step**) (**currently working on**)
+        * [x] add callbacks
+    * [x] create notebooks for each piece w/ visualizations and understanding
     * [ ] run model w/ hyperparameters from RetinaFace modified for tf==2.2 and if good enough convert to tflite
     * [ ] take trained model and fine tune with ArcFace loss for face embeddding
     * [ ] convert that to tflite and get working on RaspberryPi
