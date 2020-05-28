@@ -208,7 +208,10 @@ def tf_compute_gt_indices(
     """
     
     ious =  tf.map_fn(fn=lambda x: tf_compute_iou_map_fn(x, anchors), elems=bboxes)
+    print(f'bboxes: {bboxes.get_shape()}')
+    print(f'anchors: {anchors.get_shape()}')
     ious = tf.transpose(ious)
+    print(f'ious: {ious.get_shape()}\n')
     # indices of the bbox annotation that each anchor box overlaps most with
     max_iou_indices = tf.math.argmax(ious, axis=1)
     # the IoU's for those indices

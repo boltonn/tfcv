@@ -1,4 +1,4 @@
-# Image Review
+# Computer Visions Review
 
 ## Papers
 1. **Image Classification**
@@ -43,6 +43,14 @@
         * use a FPN on top of ResNet
     * EfficientDet: [[paper]](https://arxiv.org/pdf/1911.09070.pdf), [[Bi-FPN code]](https://github.com/yongqyu/BiFPN-tf2/blob/master/layer.py), [[production code]](https://github.com/google/automl/tree/master/efficientdet)
         * use EfficientNet as backbone and put new Bidirectional-FPN on top. (A FPN add this top-down pathway that basically had the output of every higher level features also connecting down. PANNet said lets add on another bottom up after the top-down, and Bi-FPN said let's add more skip connections so the information can flow more freely.)
+    * DETR: [[paper]](https://arxiv.org/pdf/2005.12872.pdf), [[code]]()
+        * NO MORE hand crafted engineering like anchor boxes and NMS inference!!!
+        * model architecture: uses standard CNN backbone + FPN + transformer (encoder-decoder from NLP)
+        * to avoid anchor boxes and NMS, they want a set bitartite loss, specifically the Hungarian loss. In this they allow the prediction to be of size of $N$ significantly larger than the actual number of anchor boxes and then as normal the output is a set of classification and regression coordinates for the boxes. But how do they know which output of the model aligns with which box in $N$-- the answer is just permuting them until the cost is the lowest (pretty obvious)
+        * weird thing is they predict the bounding box coordinates directly; i imagine they'll switch this to transformations as above, especially since althought the model is competitive with SOTA, it doesnt do as well on smaller objects
+        * similar to NLP they just pad images to accept different resolutions and scales (this may change too); they also flatten the output of the CNN into one sequence CxHW similar since that is what a transformer accepts
+        * outstanding questions: how do the two positional embeddings fit in and what is the auxilarly loss
+        
     
     * Additional: [YOLO](https://arxiv.org/pdf/1506.02640.pdf)
     * **Important to Understanding**: [anchor boxes](https://d2l.ai/chapter_computer-vision/anchor.html) are where we apply a convolutional layer of a particular kernel size and aspect ratio onto the backbone rather than a dense layer so that, say, a 4x4xn output of a conv layer relates back to a particular *receptive field* in the original image, often visualized as dividing the original image into 4x4=16 boxes. you then run predictions for class and points for each of those *anchor boxes* and use IoU to pick the anchor box w/ the most overlap (this was hard for me to understand but Jeremy Howard shows in this [video](youtube.com/watch?v=0frKXR-2PBY) starting around the 30' mark). It helps me to think of it as first understanding the architecture and code without this concept, and then achor boxes give the intuition behind the carefully crafted layers and loss.

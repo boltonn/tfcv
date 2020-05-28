@@ -46,7 +46,7 @@ def transform_bbox(bbox, img_width=None, img_height=None, normalized=False):
 def resize(img, bboxes, height=640, width=640):
     """Resize img and normalized bounding boxes"""
     orig_height, orig_width, _ = img.shape
-    img = tf.image.resize(img, (height, width), method='bilinear', preserve_aspect_ratio=True)
+    img = tf.image.resize(img, (height, width), method='bilinear', preserve_aspect_ratio=False)
     #boxes dont need adjustments when normalized
     return img, bboxes
  
