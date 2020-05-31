@@ -48,7 +48,7 @@ def focal_loss(y_true, y_pred):
     
 
 
-def _focal(y_true, y_pred, alpha=0.25, gamma=2.0):
+def _focal(y_true, y_pred, cutoff=0.5, alpha=0.25, gamma=2.0):
     """ Compute the focal loss given the target tensor and the predicted tensor.
     
     As defined in https://arxiv.org/abs/1708.02002
@@ -64,6 +64,8 @@ def _focal(y_true, y_pred, alpha=0.25, gamma=2.0):
     """
     labels         = y_true[:, :, :-1]
     anchor_state   = y_true[:, :, -1]  # -1 for ignore, 0 for background, 1 for object
+    print(f'labels: {labels.shape}')
+    print(f'anchor_state: {anchor_state.shape}')
     classification = y_pred
 
     # filter out "ignore" anchors
@@ -73,8 +75,8 @@ def _focal(y_true, y_pred, alpha=0.25, gamma=2.0):
 
     # compute the focal loss
     alpha_factor = tf.ones_like(labels) * alpha
-    alpha_factor = tf.where(tf.math.equal(labels, 1), alpha_factor, 1 - alpha_factor)
-    focal_weight = tf.where(tf.math.equal(labels, 1), 1 - classification, classification)
+    alpha_factor = tf.where(tf.math.greater(labels, cutoff), alpha_factor, 1 - alpha_factor)
+    focal_weight = tf.where(tf.math.greater(labels, cutoff), 1 - classification, classification)
     focal_weight = alpha_factor * focal_weight ** gamma
 
     cls_loss = focal_weight * tf.keras.losses.binary_crossentropy(labels, classification)

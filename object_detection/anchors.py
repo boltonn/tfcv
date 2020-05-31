@@ -319,7 +319,7 @@ def compute_targets(anchors, bboxes, num_classes, labels=None, negative_iou_thre
     regression_matrix = compute_gt_transforms(anchors, gt_bboxes, mean=0.0, std=0.2)
     #add on the sine col
     regression_targets = tf.concat([regression_matrix, tf.expand_dims(iou_sine_col, -1)], axis=1)
-    return (tf.expand_dims(classification_targets, 0), tf.expand_dims(regression_targets, 0))
+    return (classification_targets, regression_targets)
 
 
 def filter_anchors(anchors, classification_targets, regression_targets, img_width=640, img_height=640):

@@ -66,8 +66,7 @@ class RegressionSubnet(tf.keras.layers.Layer):
         self.regression_feature_conv = Conv2D(256, 
                                               kernel_size=(3, 3), 
                                               strides=1,
-                                              padding='same',
-                                              kernel_initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.01, seed=None),
+                                              padding='same',                             kernel_initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.01, seed=None),
                                               bias_initializer='zeros',
                                               activation='relu')
         self.regression_conv_out = Conv2D(self.n_landmarks*self.A,
