@@ -26,29 +26,16 @@ def focal_loss(y_true, y_pred):
     regression_pred = y_pred[1]
         
     classification_loss = _focal(classification_targets, classification_pred)
+    print(f'classification_loss: {classification_loss}')
     regression_loss = _smooth_l1(regression_targets, regression_pred)
+    print(f'regression_loss: {regression_loss}')
     
     return classification_loss + regression_loss
-
-
-
-# def focal_loss(y_true, classification_pred, regression_pred):
-#     """Compute Focal Loss"""
-#     classification_targets = y_true[0]
-#     regression_targets = y_true[1]
-    
-# #     classification_pred = y_pred[0]
-# #     regression_pred = y_pred[1]
-        
-#     classification_loss = _focal(classification_targets, classification_pred)
-#     regression_loss = _smooth_l1(regression_targets, regression_pred)
-    
-#     return classification_loss + regression_loss
     
     
 
-
-def _focal(y_true, y_pred, cutoff=0.5, alpha=0.25, gamma=2.0):
+#Something is fucked up here. Getting magnitudes e3
+def _focal(y_true, y_pred, alpha=0.25, gamma=2.0):
     """ Compute the focal loss given the target tensor and the predicted tensor.
     
     As defined in https://arxiv.org/abs/1708.02002
@@ -64,8 +51,8 @@ def _focal(y_true, y_pred, cutoff=0.5, alpha=0.25, gamma=2.0):
     """
     labels         = y_true[:, :, :-1]
     anchor_state   = y_true[:, :, -1]  # -1 for ignore, 0 for background, 1 for object
-    print(f'labels: {labels.shape}')
-    print(f'anchor_state: {anchor_state.shape}')
+    #print(f'labels: {labels.shape}')
+    #print(f'anchor_state: {anchor_state.shape}')
     classification = y_pred
 
     # filter out "ignore" anchors
@@ -75,18 +62,23 @@ def _focal(y_true, y_pred, cutoff=0.5, alpha=0.25, gamma=2.0):
 
     # compute the focal loss
     alpha_factor = tf.ones_like(labels) * alpha
-    alpha_factor = tf.where(tf.math.greater(labels, cutoff), alpha_factor, 1 - alpha_factor)
-    focal_weight = tf.where(tf.math.greater(labels, cutoff), 1 - classification, classification)
-    focal_weight = alpha_factor * focal_weight ** gamma
+    # label=1 -> alpha_factor, label=0 -> 1-alpha_factor
+    alpha_factor = tf.where(tf.math.equal(labels, 1), alpha_factor, 1 - alpha_factor)
+    focal_weight = tf.where(tf.math.equal(labels, 1), 1 - classification, classification)
+    focal_weight = alpha_factor * tf.math.pow(focal_weight, gamma)
 
-    cls_loss = focal_weight * tf.keras.losses.binary_crossentropy(labels, classification)
+    # focal weigtht is alpha * (1-p_t)^gamma
+    # binary cross entropy is -log(p_t)
+    cls_loss = focal_weight * tf.keras.backend.binary_crossentropy(labels, classification)
 
     # compute the normalizer: the number of positive anchors
     normalizer = tf.where(tf.math.equal(anchor_state, 1))
-    normalizer = tf.cast(tf.shape(normalizer)[0], tf.keras.backend.floatx())
+    print(f'normalizer: {tf.shape(normalizer[0])[0]}')
+    normalizer = tf.cast(tf.shape(normalizer[0])[0], tf.keras.backend.floatx())
     normalizer = tf.math.maximum(tf.keras.backend.cast_to_floatx(1.0), normalizer)
 
-    return tf.keras.backend.sum(cls_loss) / normalizer
+    classification_loss = tf.keras.backend.sum(cls_loss) / normalizer
+    return classification_loss
 
 
 
@@ -125,4 +117,5 @@ def _smooth_l1(y_true, y_pred, sigma=3.0):
     # compute the normalizer: the number of positive anchors
     normalizer = tf.math.maximum(1, tf.shape(indices)[0])
     normalizer = tf.cast(normalizer, dtype=tf.keras.backend.floatx())
-    return tf.keras.backend.sum(regression_loss) / normalizer
+    regression_loss = tf.keras.backend.sum(regression_loss) / normalizer
+    return regression_loss

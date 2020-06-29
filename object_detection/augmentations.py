@@ -177,20 +177,23 @@ def random_crop(img, bboxes, lower_bound=0.3, upper_bound=1., clip=True, min_box
     return new_img, new_boxes
 
 
-def tf_random_horizontal_flip(img, bboxes, prob=0.5):
+def tf_random_horizontal_flip(img, bboxes=None, prob=0.5):
     """Random horizontal flip on image and bounding boxes"""
     
     p = np.random.uniform(low=0, high=1, size=1)
     if p <= prob:
         img = tf.image.flip_left_right(img)
-        x1 = 1 - bboxes[:, 2]
-        x2 =  1 - bboxes[:, 0]
-        y1 = bboxes[:, 1]
-        y2 = bboxes[:, 3]
-        #print(x1, y1, x2, y2)
-        bboxes = tf.keras.backend.stack([x1, y1, x2, y2], axis=1)
+        if bboxes is not None:
+            x1 = 1 - bboxes[:, 2]
+            x2 =  1 - bboxes[:, 0]
+            y1 = bboxes[:, 1]
+            y2 = bboxes[:, 3]
+            #print(x1, y1, x2, y2)
+            bboxes = tf.keras.backend.stack([x1, y1, x2, y2], axis=1)
     
-    return img, bboxes
+            return img, bboxes
+        else:
+            return img
 
 
 def photometric_color_distortion(img):
